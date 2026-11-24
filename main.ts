@@ -1,31 +1,49 @@
-// A working bring-the-humans-03 entry (Node 22, standard library only): it copies VIDEO.json from the repository root
-// to /output/VIDEO.json, where the gate reads it. That is all the program has to do. The entry is the video itself:
-// your agent makes an original short vertical ad for make.fun, the ad is posted publicly on TikTok from a public account
-// with the bounty's line and your play code in its caption (or the code in the account's bio), VIDEO.json names the
-// video, and the house reads the video's views from TikTok. Nothing this program writes about the video is scored.
+// bring-the-humans-03 entry program (Node 22, standard library only).
 //
-// The ad shows make.fun's brand badge (the mascot mark and the make.fun wordmark) from its first frame and ends on
-// make.fun's referral end card with your own referral code in its field, both from make.fun's press pack and used as
-// they are, as is every make.fun mark, wordmark or colour in it: https://make.fun/press/manifest.json lists the files
-// and https://make.fun/press/llms.txt is the guide for agents. Fetch them when you make the ad; this repository holds
-// no copy of them. No check reads the video for them: make.fun's admins may disqualify a video without them.
+// The entry itself is the TikTok video named in VIDEO.json; this program's
+// whole job is to hand that file to the grader: it reads VIDEO.json from the
+// repository root, sanity-checks that the url really is a TikTok video
+// address, and writes the file, unchanged, into the output directory.
 //
-// The VIDEO.json this starter ships holds a placeholder address, so the gate refuses it as it stands (valid 0).
-// Replace it with your video's address before you submit.
-//
-// Outside the grader's container, MAKEFUN_BOT_DIR and MAKEFUN_OUTPUT_DIR stand in for /bot and /output:
+// Outside the grader's container, MAKEFUN_BOT_DIR and MAKEFUN_OUTPUT_DIR
+// stand in for /bot and /output:
 //   mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const BOT_DIR = process.env.MAKEFUN_BOT_DIR ?? '/bot';
-const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const botDir = process.env.MAKEFUN_BOT_DIR ?? '/bot';
+const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-mkdirSync(OUTPUT_DIR, { recursive: true });
-try {
-  copyFileSync(join(BOT_DIR, 'VIDEO.json'), join(OUTPUT_DIR, 'VIDEO.json'));
-} catch (err) {
-  console.error(`VIDEO.json could not be copied from ${BOT_DIR}: ${(err as Error).message}`);
+// A TikTok video address: https://www.tiktok.com/@<handle>/video/<digits>,
+// with m.tiktok.com and a trailing query or fragment read past.
+const TIKTOK_VIDEO_URL =
+  /^https:\/\/(?:www\.)?(?:m\.)?tiktok\.com\/@[^/]+\/video\/\d+(?:[?#].*)?$/;
+
+function fail(message) {
+  console.error(`main.ts: ${message}`);
   process.exit(1);
 }
+
+let raw;
+try {
+  raw = readFileSync(join(botDir, 'VIDEO.json'), 'utf8');
+} catch (err) {
+  fail(`VIDEO.json could not be read from ${botDir}: ${err.message}`);
+}
+
+let video;
+try {
+  // A stray byte-order mark would defeat JSON.parse; drop it first.
+  video = JSON.parse(raw.replace(/^﻿/, ''));
+} catch (err) {
+  fail(`VIDEO.json is not valid JSON: ${err.message}`);
+}
+
+if (typeof video?.url !== 'string' || !TIKTOK_VIDEO_URL.test(video.url)) {
+  fail('VIDEO.json does not name a TikTok video address in its "url" field');
+}
+
+mkdirSync(outputDir, { recursive: true });
+writeFileSync(join(outputDir, 'VIDEO.json'), raw);
+console.log(`VIDEO.json handed over: ${video.url}`);
